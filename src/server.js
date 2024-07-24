@@ -1,5 +1,6 @@
 const http = require("http");
 const url = require("url");
+const querystring = require("querystring");
 const dns = require("dns");
 
 const urls = {};
@@ -15,23 +16,50 @@ const parseBody = (req, callback) => {
   });
 };
 
+const isValidUrl = (urlString) => {
+  try {
+    const parsedUrl = new URL(urlString);
+    // Only accept http and https schemes
+    return parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
+  } catch (_) {
+    return false;
+  }
+};
+
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const path = parsedUrl.pathname;
 
+  // CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "https://www.freecodecamp.org");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    // Handle preflight request
+    res.writeHead(204, { "Content-Type": "text/plain" });
+    res.end();
+    return;
+  }
+
   if (req.method === "POST" && path === "/api/shorturl") {
     parseBody(req, (body) => {
-      const originalUrl = JSON.parse(body).url;
-      const urlRegex =
-        /^(http:\/\/|https:\/\/)(www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(\/\S*)?$/;
+      const parsedBody = querystring.parse(body);
+      const originalUrl = parsedBody.url;
 
-      if (!urlRegex.test(originalUrl)) {
+      if (!isValidUrl(originalUrl)) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "invalid url" }));
         return;
       }
 
       const hostname = url.parse(originalUrl).hostname;
+      if (!hostname) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid url" }));
+        return;
+      }
+
       dns.lookup(hostname, (err) => {
         if (err) {
           res.writeHead(400, { "Content-Type": "application/json" });
